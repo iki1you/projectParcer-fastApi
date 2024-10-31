@@ -24,6 +24,7 @@ AVAILABLE_ITEMS = [
 ]
 
 class Item(BaseModel):
+    id: str
     name: str
     price: str
 
@@ -44,8 +45,10 @@ async def parse_items(item_name: str, page_count: int):
     sync_function_noargs = partial(background_parser, item_name, page_count)
     products = await loop.run_in_executor(None, sync_function_noargs)
     for p in products:
-        item = Item(name=p[0], price=p[1])
-        PRICES_DB.append(item)
+        item = Item(id=p[0], name=p[1], price=p[2])
+        if item not in PRICES_DB:
+            PRICES_DB.append(item)
+            print(1)
     return products
 
 

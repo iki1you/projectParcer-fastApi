@@ -23,6 +23,9 @@ def get_response(product, page=1, amount=30):
         cookies=cookies,
         headers=headers,
     )
+    import time
+
+    time.sleep(0.2)
 
     return response
 
@@ -43,9 +46,10 @@ def parser_maxidom(product, page_count):
 
         product_cards = soup.find_all("article", class_="l-product")
         for product in product_cards:
+            id = product.find("div", class_="lvl1__product-body-info-code").find("span").text
             price = product.find("div", class_="l-product__price").find("div", class_="l-product__price-base").text.strip()
             name = product.find("div", class_="l-product__name").find("a").find("span").text
-            products.append((name, price))
+            products.append((id, name, price))
         print(f"Готова страница {page_number}/{page_count}")
 
     return products
