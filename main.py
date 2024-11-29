@@ -86,6 +86,7 @@ async def get_available_items():
 async def read_prices(session: Session = SessionDep, offset: int = 0, limit: int = 100):
     return session.exec(select(Item).offset(offset).limit(limit)).all()
 
+
 @app.get("/prices/{item_id}")
 async def read_item(item_id: int, session: Session = SessionDep):
     price = session.get(Item, item_id)
