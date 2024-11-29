@@ -90,7 +90,7 @@ async def read_prices(session: Session = SessionDep, offset: int = 0, limit: int
 async def read_item(item_id: int, session: Session = SessionDep):
     price = session.get(Item, item_id)
     if not price:
-        raise HTTPException(status_code=404, detail="Price not found")
+        raise HTTPException(status_code=404, detail="Товар не найден")
     return price
 
 
@@ -98,7 +98,7 @@ async def read_item(item_id: int, session: Session = SessionDep):
 async def update_item(item_id: int, data: Item, session: Session = SessionDep):
     price_db = session.get(Item, item_id)
     if not price_db:
-        raise HTTPException(status_code=404, detail="Price not found")
+        raise HTTPException(status_code=404, detail="Товар не найден")
     price_data = data.model_dump(exclude_unset=True)
     price_db.sqlmodel_update(price_data)
     session.add(price_db)
@@ -117,7 +117,7 @@ async def create_item(item: Item, session: Session = SessionDep):
 async def delete_item(item_id: int, session: Session = SessionDep):
     item = session.get(Item, item_id)
     if not item:
-        raise HTTPException(status_code=404, detail="Price not found")
+        raise HTTPException(status_code=404, detail="Товар не найден")
     session.delete(item)
     session.commit()
     return {"ok": True}
