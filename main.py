@@ -1,12 +1,9 @@
 import asyncio
 from functools import partial
-from fastapi import FastAPI
-from pydantic import BaseModel
+from fastapi import FastAPI, Depends, HTTPException
+from sqlmodel import Field, SQLModel, create_engine, Session, select
 
 
-app = FastAPI()
-
-PRICES_DB = []
 AVAILABLE_ITEMS = [
     "kraski-i-emali", "dreli", "sadovaya-tehnika",
     "zapchasti-dlya-sadovoy-tehniki", "unitazy",
@@ -23,10 +20,36 @@ AVAILABLE_ITEMS = [
     "melkaya-tehnika-dlya-kuhni", "posuda-i-pribory-dlya-vypechki"
 ]
 
-class Item(BaseModel):
-    id: str
+class Item(SQLModel, table=True):
+    id: str = Field(primary_key=True)
     name: str
     price: str
+
+
+app = FastAPI()
+sqlite_url = "sqlite:///parser.db"
+engine = create_engine(sqlite_url)
+
+def get_session():
+    with Session(engine) as session:
+        yield session
+
+SessionDep = Depends(get_session)
+
+def create_db_and_tables():
+    SQLModel.metadata.create_all(engine)
+
+
+@app.on_event("startup")
+async def startup_event():
+    init_db()
+
+
+async def add_item(item, session):
+    if session.get(Item, item.id) is None:
+        session.add(item)
+        session.commit()
+        session.refresh(item)
 
 
 def background_parser(product, page_count):
@@ -39,16 +62,18 @@ def background_parser(product, page_count):
     return products
 
 
+def init_db():
+    SQLModel.metadata.create_all(engine)
+
+
 @app.post("/parse-items")
-async def parse_items(item_name: str, page_count: int):
+async def parse_items(item_name: str, page_count: int, session: Session = SessionDep):
     loop = asyncio.get_running_loop()
     sync_function_noargs = partial(background_parser, item_name, page_count)
     products = await loop.run_in_executor(None, sync_function_noargs)
     for p in products:
         item = Item(id=p[0], name=p[1], price=p[2])
-        if item not in PRICES_DB:
-            PRICES_DB.append(item)
-            print(1)
+        await add_item(item, session)
     return products
 
 
@@ -57,33 +82,42 @@ async def get_available_items():
     return AVAILABLE_ITEMS
 
 
-@app.get("/prices_async")
-async def read_prices():
-    return PRICES_DB
-
+@app.get("/prices")
+async def read_prices(session: Session = SessionDep, offset: int = 0, limit: int = 100):
+    return session.exec(select(Item).offset(offset).limit(limit)).all()
 
 @app.get("/prices/{item_id}")
-async def read_item(item_id: int):
-    return PRICES_DB[item_id]
+async def read_item(item_id: int, session: Session = SessionDep):
+    price = session.get(Item, item_id)
+    if not price:
+        raise HTTPException(status_code=404, detail="Price not found")
+    return price
 
 
 @app.put("/prices/{item_id}")
-async def update_item(item_id: int, data: Item):
-    PRICES_DB[item_id] = data
-    return PRICES_DB[item_id]
+async def update_item(item_id: int, data: Item, session: Session = SessionDep):
+    price_db = session.get(Item, item_id)
+    if not price_db:
+        raise HTTPException(status_code=404, detail="Price not found")
+    price_data = data.model_dump(exclude_unset=True)
+    price_db.sqlmodel_update(price_data)
+    session.add(price_db)
+    session.commit()
+    session.refresh(price_db)
+    return price_db
 
 
 @app.post("/prices/create")
-async def create_item(item: Item):
-    PRICES_DB.append(item)
-    return PRICES_DB[-1]
+async def create_item(item: Item, session: Session = SessionDep):
+    await add_item(item, session)
+    return item
 
 
 @app.delete("/prices/{item_id}")
-async def delete_item(item_id: int):
-    try:
-        item = PRICES_DB[item_id]
-        PRICES_DB.remove(item)
-        return {"status": "ok"}
-    except IndexError as e:
-        return {"error": str(e)}
+async def delete_item(item_id: int, session: Session = SessionDep):
+    item = session.get(Item, item_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Price not found")
+    session.delete(item)
+    session.commit()
+    return {"ok": True}
