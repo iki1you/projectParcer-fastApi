@@ -1,3 +1,4 @@
 parser.db
 .idea
 .venv
+nats-server.exe
