@@ -3,7 +3,7 @@ import nats
 from fastapi import FastAPI, Depends, HTTPException
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from sqlmodel import Field, SQLModel, create_engine, select
-from sqlmodel.ext.asyncio.session import AsyncSession, Session
+from sqlmodel.ext.asyncio.session import AsyncSession
 from starlette.websockets import WebSocket, WebSocketDisconnect
 
 
@@ -22,7 +22,6 @@ AVAILABLE_ITEMS = [
     "udliniteli-setevye-filtry-ibp", "stulya",
     "melkaya-tehnika-dlya-kuhni", "posuda-i-pribory-dlya-vypechki"
 ]
-
 
 
 class ConnectionManager:
@@ -126,6 +125,7 @@ async def parse_items(item_name: str, page_count: int, session: AsyncSession = S
     for p in products:
         item = Item(id=p[0], name=p[1], price=p[2])
         await add_item(item, session)
+
     return products
 
 
@@ -144,6 +144,7 @@ async def read_item(item_id: int, session: AsyncSession = SessionDep):
     price = await session.get(Item, item_id)
     if not price:
         raise HTTPException(status_code=404, detail="Товар не найден")
+
     return price
 
 
@@ -152,15 +153,15 @@ async def update_item(item_id: int, data: Item, session: AsyncSession = SessionD
     price_db = await session.get(Item, item_id)
     if not price_db:
         raise HTTPException(status_code=404, detail="Товар не найден")
+
     price_data = data.model_dump(exclude_unset=True)
     price_db.sqlmodel_update(price_data)
     session.add(price_db)
     await session.commit()
     await session.refresh(price_db)
 
-
-    data = json.dumps(data.model_dump())
-    await manager.nc.publish("update_item", data.encode())
+    data = "update_item: " +  json.dumps(data.model_dump())
+    await manager.nc.publish("update_item", data.encode(encoding="utf-8"))
 
     return price_db
 
@@ -169,8 +170,8 @@ async def update_item(item_id: int, data: Item, session: AsyncSession = SessionD
 async def create_item(item: Item, session: AsyncSession = SessionDep):
     await add_item(item, session)
 
-    data = json.dumps(item.model_dump())
-    await manager.nc.publish("create_item", data.encode())
+    data = "create_item: " + json.dumps(item.model_dump())
+    await manager.nc.publish("create_item", data.encode(encoding="utf-8"))
     return item
 
 
@@ -182,8 +183,8 @@ async def delete_item(item_id: int, session: AsyncSession = SessionDep):
     await session.delete(item)
     await session.commit()
 
-    data = json.dumps(item.model_dump())
-    await manager.nc.publish("delete_item", data.encode())
+    data = "delete_item: " + json.dumps(item.model_dump())
+    await manager.nc.publish("delete_item", data.encode(encoding="utf-8"))
 
     return {"ok": True}
 
